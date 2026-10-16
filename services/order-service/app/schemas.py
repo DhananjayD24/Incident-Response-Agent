@@ -128,3 +128,27 @@ class FailureStatus(BaseModel):
     error_spike: bool
     error_spike_rate: float
     memory_leak: bool
+
+
+# ── Deployment ───────────────────────────────────────────────────────────────
+
+class DeploymentCreate(BaseModel):
+    """Payload to record a deployment event."""
+    service: str
+    version: str
+    commit_sha: Optional[str] = None
+    deployed_by: str = "scenarios-cli"
+    notes: Optional[str] = None
+
+
+class DeploymentOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    service: str
+    version: str
+    commit_sha: Optional[str] = None
+    deployed_by: str
+    deployed_at: datetime.datetime
+    notes: Optional[str] = None
+

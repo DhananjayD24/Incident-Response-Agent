@@ -1,0 +1,54 @@
+{
+  "scenario": "n_plus_one",
+  "title": "N+1 Query Regression",
+  "description": "The order-listing endpoint fires one extra DB query per row instead of using a JOIN, causing the query count to explode proportionally with page size.",
+  "true_root_cause": {
+    "category": "code_regression",
+    "component": "order-service",
+    "flag": "n_plus_one",
+    "summary": "Missing eager-load in list_orders() — ORM fetches order items in a separate SELECT per order (N+1 anti-pattern)"
+  },
+  "injected_by": "POST /admin/failure {\"n_plus_one\": true}",
+  "key_evidence_signals": [
+    {
+      "metric": "db_queries_total / http_requests_total",
+      "panel": "DB Queries per HTTP Request",
+      "expected_behaviour": "Ratio jumps from ~2 to ~22 for default page_size=20",
+      "direction": "up",
+      "threshold": 10
+    },
+    {
+      "metric": "db_query_duration_seconds",
+      "panel": "DB Query Latency p95",
+      "expected_behaviour": "Moderate increase — each individual query is fast, but there are many more of them",
+      "direction": "up",
+      "threshold": 0.05
+    },
+    {
+      "metric": "http_request_duration_seconds",
+      "panel": "HTTP Latency p95",
+      "expected_behaviour": "p95 rises proportionally to (N * per_query_latency)",
+      "direction": "up",
+      "threshold": 0.5
+    },
+    {
+      "metric": "http_errors_total",
+      "panel": "HTTP Error Rate",
+      "expected_behaviour": "Remains near zero — N+1 does not cause errors, only slowness",
+      "direction": "stable",
+      "threshold": 0
+    }
+  ],
+  "red_herrings": [
+    "CPU usage may rise slightly due to more SQLAlchemy object hydration — not the root cause"
+  ],
+  "recommended_fix": "Restore eager-loading via joinedload/selectinload in list_orders(); rollback to v1.8.1",
+  "rollback_target": "order-service@v1.8.1",
+  "loki_query": "{service=\"app\"} |= \"n1\" or {service=\"app\"} |= \"fetch_items\"",
+  "evaluation_checks": [
+    "Agent identifies n_plus_one as the active flag",
+    "Agent cites db_queries_total ratio as primary evidence",
+    "Agent does NOT blame high latency alone without the query-count signal",
+    "Recommended fix mentions eager-loading or rollback to v1.8.1"
+  ]
+}

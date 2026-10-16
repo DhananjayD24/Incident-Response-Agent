@@ -1,0 +1,63 @@
+{
+  "scenario": "bad_deploy",
+  "title": "Bad Deployment — v1.8.2 N+1 Regression",
+  "description": "order-service:v1.8.2 is deployed over the stable v1.8.1. The new build contains an N+1 query regression in the order-listing endpoint, so DB queries per request explode immediately after the deploy timestamp. The deployments table is the audit trail that ties the regression to a specific release.",
+  "true_root_cause": {
+    "category": "code_regression",
+    "component": "order-service",
+    "flag": "n_plus_one",
+    "summary": "Deployment order-service@v1.8.2 (commit deadbeef…) introduced a missing eager-load in list_orders() — the ORM fetches order items in a separate SELECT per order (N+1 anti-pattern)"
+  },
+  "injected_by": "POST /deployments {\"service\": \"order-service\", \"version\": \"v1.8.2\"} + POST /admin/failure {\"n_plus_one\": true}",
+  "key_evidence_signals": [
+    {
+      "metric": "deployments (audit table)",
+      "panel": "Recent Deployments",
+      "expected_behaviour": "New row: order-service@v1.8.2 deployed by ci-pipeline shortly after order-service@v1.8.1; incident start aligns with this timestamp",
+      "direction": "up",
+      "threshold": null
+    },
+    {
+      "metric": "db_queries_total / http_requests_total",
+      "panel": "DB Queries per HTTP Request",
+      "expected_behaviour": "Ratio jumps from ~2 to ~22 for default page_size=20 immediately after the v1.8.2 deploy timestamp",
+      "direction": "up",
+      "threshold": 10
+    },
+    {
+      "metric": "http_request_duration_seconds",
+      "panel": "HTTP Latency p95",
+      "expected_behaviour": "p95 rises after the deploy — latency regression starts at the deploy boundary, not before",
+      "direction": "up",
+      "threshold": 0.5
+    },
+    {
+      "metric": "http_errors_total",
+      "panel": "HTTP Error Rate",
+      "expected_behaviour": "Remains near zero — the regression causes slowness, not failures",
+      "direction": "stable",
+      "threshold": 0
+    },
+    {
+      "metric": "db_query_duration_seconds",
+      "panel": "DB Query Latency p95",
+      "expected_behaviour": "Each individual query is fast — the DB itself is healthy; only the query COUNT grew",
+      "direction": "stable",
+      "threshold": null
+    }
+  ],
+  "red_herrings": [
+    "The deploy is the trigger, but blaming 'the deployment' alone is incomplete — the agent must show WHY (query-count ratio) that the deploy is guilty",
+    "Elevated latency could be misread as DB slowness — but db_query_duration_seconds p95 and the query-count-per-request signals rule out a slow DB",
+    "CPU may rise slightly from SQLAlchemy object hydration — not the root cause"
+  ],
+  "recommended_fix": "Rollback order-service to v1.8.1 (known-good), then fix the N+1 with joinedload/selectinload before re-deploying",
+  "rollback_target": "order-service@v1.8.1",
+  "loki_query": "{service=\"app\"} |= \"deployment_recorded\" or {service=\"app\"} |= \"n1\"",
+  "evaluation_checks": [
+    "Agent reads the deployments table and identifies v1.8.2 as the change that correlates with incident start",
+    "Agent cites db_queries_total ratio jump as the evidence that connects the deploy to the regression",
+    "Agent recommends rollback to v1.8.1 as the immediate mitigation",
+    "Agent does NOT blame the database itself (individual query latency is stable)"
+  ]
+}

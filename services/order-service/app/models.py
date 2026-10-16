@@ -16,6 +16,7 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
+
 class Base(DeclarativeBase):
     pass
 
@@ -100,3 +101,20 @@ class OrderItem(Base):
 
     order: Mapped[Order] = relationship("Order", back_populates="items")
     product: Mapped[Product] = relationship("Product", back_populates="order_items")
+
+
+class Deployment(Base):
+    """Audit log of every service deployment, used by scenarios and MCP tools."""
+
+    __tablename__ = "deployments"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    service: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    version: Mapped[str] = mapped_column(String(50), nullable=False)
+    commit_sha: Mapped[str | None] = mapped_column(String(40))
+    deployed_by: Mapped[str] = mapped_column(String(100), nullable=False, default="scenarios-cli")
+    deployed_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), index=True
+    )
+    notes: Mapped[str | None] = mapped_column(Text)
+

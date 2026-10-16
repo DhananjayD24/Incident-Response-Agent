@@ -1,0 +1,55 @@
+{
+  "scenario": "memory_leak",
+  "title": "Memory Leak",
+  "description": "A 1 KB buffer is appended to a module-level list on every request. RSS grows monotonically. In the early stage there are no latency or error symptoms — the only signal is growing memory.",
+  "true_root_cause": {
+    "category": "resource_leak",
+    "component": "order-service",
+    "flag": "memory_leak",
+    "summary": "memory_leak=true — 1 KB accumulated per request in a module-level list, simulating unbounded cache or response buffer accumulation"
+  },
+  "injected_by": "POST /admin/failure {\"memory_leak\": true}",
+  "key_evidence_signals": [
+    {
+      "metric": "process_resident_memory_bytes",
+      "panel": "Memory Usage",
+      "expected_behaviour": "RSS rises steadily and monotonically; rate ≈ 1 KB × requests/s",
+      "direction": "up",
+      "threshold": null
+    },
+    {
+      "metric": "http_request_duration_seconds",
+      "panel": "HTTP Latency p95",
+      "expected_behaviour": "Unaffected early on; may rise if GC pressure increases at very high memory",
+      "direction": "stable",
+      "threshold": null
+    },
+    {
+      "metric": "http_errors_total",
+      "panel": "HTTP Error Rate",
+      "expected_behaviour": "Near zero — no errors injected",
+      "direction": "stable",
+      "threshold": 0
+    },
+    {
+      "metric": "db_queries_total / http_requests_total",
+      "panel": "DB Queries per HTTP Request",
+      "expected_behaviour": "Stable — not a DB problem",
+      "direction": "stable",
+      "threshold": null
+    }
+  ],
+  "red_herrings": [
+    "Without the memory panel, the service looks perfectly healthy from latency/error metrics",
+    "OOMKill or pod restart (in k8s) would appear as a crash event — not applicable here but worth noting"
+  ],
+  "recommended_fix": "Identify and release the unbounded reference (module-level list, cache without TTL, etc.); restart the service to reclaim memory immediately",
+  "rollback_target": null,
+  "loki_query": "{service=\"app\"} | json | __error__ != \"\"",
+  "evaluation_checks": [
+    "Agent identifies memory_leak as the active flag",
+    "Agent cites process_resident_memory_bytes as primary evidence",
+    "Agent notes that latency and error rate are stable (rules out other failure modes)",
+    "Agent recommends fixing the unbounded reference, not scaling memory"
+  ]
+}

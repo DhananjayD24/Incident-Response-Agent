@@ -1,0 +1,62 @@
+{
+  "scenario": "high_cpu",
+  "title": "High CPU — Symptom of Error Retry Loop",
+  "description": "CPU usage is elevated because error_spike causes 30% of requests to return 500, which triggers aggressive client retries. The CPU burn thread models the server-side load of processing those retries. CPU is the *symptom* — error_spike is the *root cause*.",
+  "true_root_cause": {
+    "category": "application_error",
+    "component": "order-service",
+    "flag": "error_spike",
+    "summary": "30% of requests fail with HTTP 500 (error_spike=true, rate=0.3), causing client retry storms that drive up CPU usage"
+  },
+  "injected_by": "POST /admin/failure {\"error_spike\": true, \"error_spike_rate\": 0.3, \"high_cpu\": true}",
+  "key_evidence_signals": [
+    {
+      "metric": "http_errors_total",
+      "panel": "HTTP Error Rate",
+      "expected_behaviour": "Error rate spikes — ~30% of requests are HTTP 500",
+      "direction": "up",
+      "threshold": 0.1
+    },
+    {
+      "metric": "process_cpu_seconds_total",
+      "panel": "CPU Usage",
+      "expected_behaviour": "CPU rises — but this is a consequence of retry load, not the root cause",
+      "direction": "up",
+      "threshold": null
+    },
+    {
+      "metric": "http_request_duration_seconds",
+      "panel": "HTTP Latency p95",
+      "expected_behaviour": "Latency is NOT significantly elevated — errors fail fast, before DB is touched",
+      "direction": "stable",
+      "threshold": null
+    },
+    {
+      "metric": "db_queries_total / http_requests_total",
+      "panel": "DB Queries per HTTP Request",
+      "expected_behaviour": "Ratio is stable — errors are thrown before DB queries run",
+      "direction": "stable",
+      "threshold": null
+    },
+    {
+      "metric": "db_query_duration_seconds",
+      "panel": "DB Query Latency p95",
+      "expected_behaviour": "Stable — DB itself is healthy",
+      "direction": "stable",
+      "threshold": null
+    }
+  ],
+  "red_herrings": [
+    "High CPU is visible — naive diagnosis blames CPU contention or a CPU-bound workload",
+    "Correct diagnosis requires correlating CPU rise with error_rate rise, not with latency"
+  ],
+  "recommended_fix": "Identify and fix the error_spike source (application bug or downstream dependency); CPU normalises automatically once errors drop",
+  "rollback_target": null,
+  "loki_query": "{service=\"app\"} |= \"error\" | json | status >= 500",
+  "evaluation_checks": [
+    "Agent identifies error_spike as the root cause flag, NOT high_cpu",
+    "Agent cites http_errors_total as the primary evidence",
+    "Agent explains CPU rise as a consequence of retry storms",
+    "Agent does NOT recommend CPU scaling as a fix"
+  ]
+}

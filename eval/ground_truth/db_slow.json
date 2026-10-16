@@ -1,0 +1,62 @@
+{
+  "scenario": "db_slow",
+  "title": "Slow Database Queries",
+  "description": "A pg_sleep() is injected before every DB operation, simulating a missing index, lock contention, or an overloaded Postgres instance.",
+  "true_root_cause": {
+    "category": "database_performance",
+    "component": "postgres",
+    "flag": "db_slow",
+    "summary": "DB layer is slow (db_slow=true, db_slow_seconds=2.0) — every query takes ≥2 s, causing high p95 latency across all endpoints"
+  },
+  "injected_by": "POST /admin/failure {\"db_slow\": true, \"db_slow_seconds\": 2.0}",
+  "key_evidence_signals": [
+    {
+      "metric": "db_query_duration_seconds",
+      "panel": "DB Query Latency p95",
+      "expected_behaviour": "p95 jumps to ≥2 s for every operation and endpoint",
+      "direction": "up",
+      "threshold": 2.0
+    },
+    {
+      "metric": "http_request_duration_seconds",
+      "panel": "HTTP Latency p95",
+      "expected_behaviour": "p95 rises to ≥2 s across all endpoints (GET and POST)",
+      "direction": "up",
+      "threshold": 2.0
+    },
+    {
+      "metric": "http_requests_total rate",
+      "panel": "HTTP Requests/s",
+      "expected_behaviour": "Throughput drops as each request blocks for 2+ seconds",
+      "direction": "down",
+      "threshold": null
+    },
+    {
+      "metric": "http_errors_total",
+      "panel": "HTTP Error Rate",
+      "expected_behaviour": "Remains near zero — slow queries do not cause 500 errors",
+      "direction": "stable",
+      "threshold": 0
+    },
+    {
+      "metric": "db_queries_total / http_requests_total",
+      "panel": "DB Queries per HTTP Request",
+      "expected_behaviour": "Ratio unchanged — same number of queries, they are just slower",
+      "direction": "stable",
+      "threshold": null
+    }
+  ],
+  "red_herrings": [
+    "High latency could suggest an N+1 bug — but query-count ratio is stable",
+    "Timeout errors may appear in Loki logs — these are a consequence, not the cause"
+  ],
+  "recommended_fix": "Identify and add missing index; or resolve lock contention; or scale Postgres",
+  "rollback_target": null,
+  "loki_query": "{service=\"app\"} |= \"db_slow\" or {service=\"app\"} |= \"duration_ms\" | json | duration_ms > 2000",
+  "evaluation_checks": [
+    "Agent identifies db_slow as the active flag",
+    "Agent cites db_query_duration_seconds p95 as primary evidence",
+    "Agent confirms error rate is stable (rules out error_spike)",
+    "Agent confirms query-count ratio is stable (rules out N+1)"
+  ]
+}

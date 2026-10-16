@@ -1,0 +1,52 @@
+{
+  "scenario": "error_spike",
+  "title": "Random HTTP 500 Error Spike",
+  "description": "30% of all data-plane requests fail with HTTP 500. Errors are thrown early in the request handler before any DB query, so latency is unaffected.",
+  "true_root_cause": {
+    "category": "application_error",
+    "component": "order-service",
+    "flag": "error_spike",
+    "summary": "error_spike=true with error_spike_rate=0.3 — random 500 errors injected at 30% probability per request"
+  },
+  "injected_by": "POST /admin/failure {\"error_spike\": true, \"error_spike_rate\": 0.3}",
+  "key_evidence_signals": [
+    {
+      "metric": "http_errors_total",
+      "panel": "HTTP Error Rate",
+      "expected_behaviour": "Rate spikes to ~30% of total request rate; error_type=server_error",
+      "direction": "up",
+      "threshold": 0.1
+    },
+    {
+      "metric": "http_request_duration_seconds",
+      "panel": "HTTP Latency p95",
+      "expected_behaviour": "Unchanged — errors return quickly before any work is done",
+      "direction": "stable",
+      "threshold": null
+    },
+    {
+      "metric": "db_queries_total",
+      "panel": "DB Queries per HTTP Request",
+      "expected_behaviour": "Ratio may drop slightly because errored requests skip DB queries",
+      "direction": "stable_or_down",
+      "threshold": null
+    },
+    {
+      "metric": "process_cpu_seconds_total",
+      "panel": "CPU Usage",
+      "expected_behaviour": "Stable — no CPU burn injected in this scenario",
+      "direction": "stable",
+      "threshold": null
+    }
+  ],
+  "red_herrings": [],
+  "recommended_fix": "Identify the upstream dependency or code path throwing 500s; check Loki error logs for exception details",
+  "rollback_target": null,
+  "loki_query": "{service=\"app\"} |= \"error\" | json | status = 500",
+  "evaluation_checks": [
+    "Agent identifies error_spike as the active flag",
+    "Agent cites http_errors_total as primary evidence",
+    "Agent notes latency is unaffected (errors are pre-DB)",
+    "Agent checks Loki logs for error_type details"
+  ]
+}

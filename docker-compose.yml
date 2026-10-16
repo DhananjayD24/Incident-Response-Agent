@@ -4,6 +4,7 @@
 # Services:
 #   app        FastAPI order-service          → http://localhost:8000
 #   db         PostgreSQL 16                  → localhost:5432
+#   traffic    Locust traffic generator       → http://localhost:8089  (profile: traffic)
 #   prometheus Prometheus                     → http://localhost:9090
 #   loki       Grafana Loki                   → http://localhost:3100
 #   promtail   Promtail (log shipper)
@@ -62,6 +63,28 @@ services:
       db:
         condition: service_healthy
     restart: on-failure
+    logging: *default-logging
+
+  # ── Traffic generator (Locust) — profile 'traffic' ──────────────────────────
+  # Steady, weighted traffic against the order-service.
+  # Start:  docker compose --profile traffic up -d traffic   (or: make traffic)
+  # Web UI: http://localhost:8089  (set LOCUST_HEADLESS=false to drive it manually)
+  traffic:
+    build:
+      context: ./services/traffic
+      dockerfile: Dockerfile
+    container_name: ira-traffic
+    environment:
+      LOCUST_HOST: "http://app:8000"
+      LOCUST_USERS: "10"
+      LOCUST_SPAWN_RATE: "2"
+      LOCUST_HEADLESS: "true"
+    ports:
+      - "8089:8089"
+    depends_on:
+      - app
+    restart: on-failure
+    profiles: ["traffic"]
     logging: *default-logging
 
   # ── Prometheus ───────────────────────────────────────────────────────────────

@@ -1,0 +1,70 @@
+{
+  "scenario": "red_herring_2",
+  "title": "Red Herring — CPU Spike Caused by an Error Retry Loop",
+  "description": "CPU usage is high, but CPU is only a symptom. error_spike fails 50% of requests with HTTP 500, clients retry aggressively, and the retry storm drives process CPU up. The naive diagnosis ('CPU saturation — scale horizontally') is wrong; the errors are the root cause.",
+  "true_root_cause": {
+    "category": "application_error",
+    "component": "order-service",
+    "flag": "error_spike",
+    "summary": "error_spike=true with error_spike_rate=0.5 — 50% of requests fail with HTTP 500; client retry storms burn CPU as a downstream effect"
+  },
+  "injected_by": "POST /admin/failure {\"error_spike\": true, \"error_spike_rate\": 0.5, \"high_cpu\": true}",
+  "key_evidence_signals": [
+    {
+      "metric": "http_errors_total",
+      "panel": "HTTP Error Rate",
+      "expected_behaviour": "Error rate spikes to ~50% of total requests — this is the TRUE root-cause signal and appears FIRST",
+      "direction": "up",
+      "threshold": 0.2
+    },
+    {
+      "metric": "process_cpu_seconds_total",
+      "panel": "CPU Usage",
+      "expected_behaviour": "CPU rises — visible, but a consequence of the retry storm, not the originating fault",
+      "direction": "up",
+      "threshold": null
+    },
+    {
+      "metric": "http_request_duration_seconds",
+      "panel": "HTTP Latency p95",
+      "expected_behaviour": "NOT significantly elevated — errors fail fast before any real work is done; if CPU were the constraint, latency would rise",
+      "direction": "stable",
+      "threshold": null
+    },
+    {
+      "metric": "process_resident_memory_bytes",
+      "panel": "Memory Usage",
+      "expected_behaviour": "Stable — rules out memory_leak",
+      "direction": "stable",
+      "threshold": null
+    },
+    {
+      "metric": "db_queries_total / http_requests_total",
+      "panel": "DB Queries per HTTP Request",
+      "expected_behaviour": "Stable or slightly down (errored requests exit before DB access) — rules out N+1",
+      "direction": "stable_or_down",
+      "threshold": null
+    },
+    {
+      "metric": "db_query_duration_seconds",
+      "panel": "DB Query Latency p95",
+      "expected_behaviour": "Stable — the DB is healthy, so CPU is not DB-bound either",
+      "direction": "stable",
+      "threshold": null
+    }
+  ],
+  "red_herrings": [
+    "High CPU tempts a 'scale CPU / add replicas' response — that treats the symptom and leaves the 500s in place",
+    "Latency is fine, which can mislead the agent into declaring the service healthy despite half of all requests failing",
+    "Timestamps: errors and CPU rise together, but only the error rate explains a fault with no latency/memory/DB signature"
+  ],
+  "recommended_fix": "Fix the source of the HTTP 500s (check Loki for the exception); CPU normalises automatically once the retry storm stops — do NOT scale CPU",
+  "rollback_target": null,
+  "loki_query": "{service=\"app\"} | json | status >= 500",
+  "evaluation_checks": [
+    "Agent identifies error_spike as the root cause and high_cpu as the symptom",
+    "Agent cites http_errors_total as the primary evidence, not process_cpu_seconds_total",
+    "Agent notes latency is stable (errors fail fast) — ruling out DB and N+1 causes",
+    "Agent does NOT recommend CPU scaling or a rollback as the fix"
+  ]
+}

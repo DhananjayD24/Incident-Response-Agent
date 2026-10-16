@@ -18,6 +18,7 @@ from app.config import settings
 from app.database import create_tables
 from app.logging_config import logger
 from app.routes import router
+from datetime import datetime, timezone
 
 # ── App factory ───────────────────────────────────────────────────────────────
 
@@ -30,6 +31,15 @@ app = FastAPI(
 # Publish version as a Prometheus info metric
 m.APP_INFO.info({"version": settings.app_version})
 
+DEPLOYMENTS = [
+    {
+        "id": 1,
+        "version": "v1.8.1",
+        "sha": "a1b2c3d4e5f6",
+        "deployed_by": "release-pipeline",
+        "deployed_at": datetime.now(timezone.utc).isoformat(),
+    }
+]
 
 # ── Startup ───────────────────────────────────────────────────────────────────
 
@@ -99,3 +109,34 @@ async def observability_middleware(request: Request, call_next) -> Response:
 # ── Routes ────────────────────────────────────────────────────────────────────
 
 app.include_router(router)
+@app.get("/admin/deployments")
+def get_deployments():
+    return {
+        "deployments": DEPLOYMENTS
+    }
+
+@app.post("/admin/deployment")
+def create_deployment(payload: dict):
+    version = payload.get("version", "unknown")
+    deployed_by = payload.get(
+        "deployed_by",
+        "unknown",
+    )
+
+    sha_map = {
+        "v1.8.1": "a1b2c3d4e5f6",
+        "v1.8.2": "deadbeef1234",
+        "v1.8.3": "cafebabe5678",
+    }
+
+    deployment = {
+        "id": len(DEPLOYMENTS) + 1,
+        "version": version,
+        "sha": sha_map.get(version, "unknown"),
+        "deployed_by": deployed_by,
+        "deployed_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+    DEPLOYMENTS.append(deployment)
+
+    return deployment

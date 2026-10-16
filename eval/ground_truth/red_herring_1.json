@@ -1,0 +1,63 @@
+{
+  "scenario": "red_herring_1",
+  "title": "Red Herring — Harmless Deploy Coincides with DB Slowdown",
+  "description": "order-service:v1.8.3 (a cosmetic text change) is deployed at the exact same time a DB slowdown begins (simulated lock contention from a batch job). The deploy is innocent: latency is caused entirely by db_slow. The correlated deploy event is the trap.",
+  "true_root_cause": {
+    "category": "database_performance",
+    "component": "postgres",
+    "flag": "db_slow",
+    "summary": "db_slow=true with db_slow_seconds=2.0 (batch-job lock contention) — every DB query takes ≥2 s; the coincident v1.8.3 deploy is cosmetic and unrelated"
+  },
+  "injected_by": "POST /deployments {\"service\": \"order-service\", \"version\": \"v1.8.3\"} + POST /admin/failure {\"db_slow\": true, \"db_slow_seconds\": 2.0} (same moment)",
+  "key_evidence_signals": [
+    {
+      "metric": "db_query_duration_seconds",
+      "panel": "DB Query Latency p95",
+      "expected_behaviour": "p95 jumps to ≥2 s for every operation right after the deploy timestamp",
+      "direction": "up",
+      "threshold": 2.0
+    },
+    {
+      "metric": "http_request_duration_seconds",
+      "panel": "HTTP Latency p95",
+      "expected_behaviour": "p95 rises to ≥2 s across all endpoints (GET and POST)",
+      "direction": "up",
+      "threshold": 2.0
+    },
+    {
+      "metric": "db_queries_total / http_requests_total",
+      "panel": "DB Queries per HTTP Request",
+      "expected_behaviour": "Ratio UNCHANGED — v1.8.3 did not alter the query pattern, proving the deploy is not an N+1 regression",
+      "direction": "stable",
+      "threshold": null
+    },
+    {
+      "metric": "http_errors_total",
+      "panel": "HTTP Error Rate",
+      "expected_behaviour": "Remains near zero — a bad deploy would typically change behaviour; here only latency moved",
+      "direction": "stable",
+      "threshold": 0
+    },
+    {
+      "metric": "deployments (audit table)",
+      "panel": "Recent Deployments",
+      "expected_behaviour": "Row order-service@v1.8.3 exists at the incident start timestamp — correlation bait, NOT causation",
+      "direction": "up",
+      "threshold": null
+    }
+  ],
+  "red_herrings": [
+    "Deploy event at the same timestamp as the failure — correlation is not causation",
+    "v1.8.3 notes say 'text change in /health response' — cosmetic, cannot affect latency",
+    "Rolling back to v1.8.1 would NOT fix the latency, because the DB layer is the problem"
+  ],
+  "recommended_fix": "Do NOT roll back — resolve the DB slowness (batch-job lock contention / missing index). The deploy is innocent; verify by checking that the query-count ratio is unchanged",
+  "rollback_target": null,
+  "loki_query": "{service=\"app\"} |= \"deployment_recorded\" or {service=\"app\"} |= \"duration_ms\" | json | duration_ms > 2000",
+  "evaluation_checks": [
+    "Agent identifies db_slow as the true root cause, NOT the v1.8.3 deploy",
+    "Agent cites db_query_duration_seconds p95 ≥ 2 s as primary evidence",
+    "Agent confirms the query-count ratio is stable (v1.8.3 did not change query behaviour)",
+    "Agent does NOT recommend rolling back as the primary fix"
+  ]
+}

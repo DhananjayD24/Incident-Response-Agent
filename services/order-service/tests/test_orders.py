@@ -56,6 +56,7 @@ def create_schema():
     Base.metadata.create_all(bind=_test_engine)
     yield
     Base.metadata.drop_all(bind=_test_engine)
+    _test_engine.dispose()  # close pooled connections so the file can be deleted (Windows)
     import os
     if os.path.exists("test_orders.db"):
         os.remove("test_orders.db")
@@ -105,7 +106,8 @@ def _make_product(client) -> dict:
     db.commit()
     db.refresh(p)
     db.close()
-    return {"id": str(p.id), "price": p.price}
+    # Numeric columns come back as Decimal — convert for JSON serialization
+    return {"id": str(p.id), "price": float(p.price)}
 
 
 # ── Tests ─────────────────────────────────────────────────────────────────────
@@ -257,3 +259,73 @@ class TestMetrics:
         assert "http_requests_total" in text
         assert "http_request_duration_seconds" in text
         assert "app_info" in text
+
+
+class TestDeployments:
+    """POST/GET /deployments — the audit table used by bad_deploy scenarios."""
+
+    def test_record_deployment(self, client):
+        resp = client.post(
+            "/deployments",
+            json={
+                "service": "order-service",
+                "version": "v1.8.2",
+                "commit_sha": "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
+                "deployed_by": "ci-pipeline",
+                "notes": "BUG: N+1 query regression",
+            },
+        )
+        assert resp.status_code == 201
+        body = resp.json()
+        assert isinstance(body["id"], int)
+        assert body["service"] == "order-service"
+        assert body["version"] == "v1.8.2"
+        assert body["commit_sha"] == "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef"
+        assert body["deployed_by"] == "ci-pipeline"
+        assert body["notes"] == "BUG: N+1 query regression"
+        assert body["deployed_at"]
+
+    def test_record_deployment_defaults(self, client):
+        resp = client.post(
+            "/deployments",
+            json={"service": "order-service", "version": "v1.8.1"},
+        )
+        assert resp.status_code == 201
+        assert resp.json()["deployed_by"] == "scenarios-cli"
+        assert resp.json()["commit_sha"] is None
+
+    def test_record_deployment_requires_service_and_version(self, client):
+        resp = client.post("/deployments", json={"service": "order-service"})
+        assert resp.status_code == 422
+
+        resp = client.post("/deployments", json={"version": "v1.8.2"})
+        assert resp.status_code == 422
+
+    def test_list_deployments_newest_first_with_limit(self, client):
+        # SQLite CURRENT_TIMESTAMP has 1-second resolution — sleep so that
+        # timestamps are strictly distinct and the ordering assertion holds.
+        import time as _time
+
+        _time.sleep(1.1)  # separate from any rows created by tests above
+        for version in ("v1.8.1", "v1.8.2", "v1.8.3"):
+            client.post(
+                "/deployments",
+                json={
+                    "service": "order-service",
+                    "version": version,
+                    "deployed_by": "ci-pipeline",
+                },
+            )
+            _time.sleep(1.1)
+
+        resp = client.get("/deployments?limit=3")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert [d["version"] for d in body] == ["v1.8.3", "v1.8.2", "v1.8.1"]
+        assert {d["service"] for d in body} == {"order-service"}
+
+    def test_list_deployments_limit_validation(self, client):
+        resp = client.get("/deployments?limit=0")
+        assert resp.status_code == 422
+        resp = client.get("/deployments?limit=9999")
+        assert resp.status_code == 422

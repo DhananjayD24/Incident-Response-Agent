@@ -12,6 +12,7 @@ Routes:
 """
 from __future__ import annotations
 
+import datetime
 import time
 import uuid
 
@@ -29,7 +30,10 @@ from app.config import (
 from app.database import get_db
 from app.failures import maybe_error_spike, maybe_memory_leak, sync_cpu_burn_state
 from app.logging_config import logger
+from app.models import Deployment
 from app.schemas import (
+    DeploymentCreate,
+    DeploymentOut,
     FailureConfig,
     FailureStatus,
     OrderCreate,
@@ -38,6 +42,7 @@ from app.schemas import (
 )
 
 router = APIRouter()
+
 
 
 # ── /health ──────────────────────────────────────────────────────────────────
@@ -163,3 +168,45 @@ def _apply_common_failures(db) -> None:
     spike_reason = maybe_error_spike()
     if spike_reason:
         raise HTTPException(status_code=500, detail=spike_reason)
+
+
+# ── /deployments ──────────────────────────────────────────────────────────────
+
+@router.get("/deployments", response_model=list[DeploymentOut], tags=["ops"])
+def list_deployments(
+    limit: int = Query(default=20, ge=1, le=200),
+    db: Session = Depends(get_db),
+) -> list[DeploymentOut]:
+    """Return recent deployment records (newest first)."""
+    from sqlalchemy import select as sa_select
+    rows = db.scalars(
+        sa_select(Deployment).order_by(Deployment.deployed_at.desc()).limit(limit)
+    ).all()
+    return list(rows)
+
+
+@router.post("/deployments", response_model=DeploymentOut, status_code=201, tags=["ops"])
+def record_deployment(
+    payload: DeploymentCreate,
+    db: Session = Depends(get_db),
+) -> DeploymentOut:
+    """Record a new deployment event in the audit log."""
+    deploy = Deployment(
+        service=payload.service,
+        version=payload.version,
+        commit_sha=payload.commit_sha,
+        deployed_by=payload.deployed_by,
+        notes=payload.notes,
+    )
+    db.add(deploy)
+    db.commit()
+    db.refresh(deploy)
+    logger.info(
+        "deployment_recorded",
+        extra={
+            "service": deploy.service,
+            "version": deploy.version,
+            "deployed_by": deploy.deployed_by,
+        },
+    )
+    return deploy
