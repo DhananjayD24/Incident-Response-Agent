@@ -6,7 +6,7 @@
     "category": "code_regression",
     "component": "order-service",
     "flag": "n_plus_one",
-    "summary": "Deployment order-service@v1.8.2 (commit deadbeef…) introduced a missing eager-load in list_orders() — the ORM fetches order items in a separate SELECT per order (N+1 anti-pattern)"
+    "summary": "Deployment order-service@v1.8.2 (commit 62f544cf…) introduced a missing eager-load in list_orders() — the ORM fetches order items in a separate SELECT per order (N+1 anti-pattern)"
   },
   "injected_by": "POST /deployments {\"service\": \"order-service\", \"version\": \"v1.8.2\"} + POST /admin/failure {\"n_plus_one\": true}",
   "key_evidence_signals": [

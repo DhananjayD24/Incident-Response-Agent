@@ -270,7 +270,7 @@ class TestDeployments:
             json={
                 "service": "order-service",
                 "version": "v1.8.2",
-                "commit_sha": "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
+                "commit_sha": "62f544cfe24fd8ecb228f664454373ba5d535d50",
                 "deployed_by": "ci-pipeline",
                 "notes": "BUG: N+1 query regression",
             },
@@ -280,7 +280,7 @@ class TestDeployments:
         assert isinstance(body["id"], int)
         assert body["service"] == "order-service"
         assert body["version"] == "v1.8.2"
-        assert body["commit_sha"] == "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef"
+        assert body["commit_sha"] == "62f544cfe24fd8ecb228f664454373ba5d535d50"
         assert body["deployed_by"] == "ci-pipeline"
         assert body["notes"] == "BUG: N+1 query regression"
         assert body["deployed_at"]

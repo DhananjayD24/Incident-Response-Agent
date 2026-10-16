@@ -35,7 +35,7 @@ DEPLOYMENTS = [
     {
         "id": 1,
         "version": "v1.8.1",
-        "sha": "a1b2c3d4e5f6",
+        "sha": "f6776ef9e132",
         "deployed_by": "release-pipeline",
         "deployed_at": datetime.now(timezone.utc).isoformat(),
     }
@@ -124,9 +124,9 @@ def create_deployment(payload: dict):
     )
 
     sha_map = {
-        "v1.8.1": "a1b2c3d4e5f6",
-        "v1.8.2": "deadbeef1234",
-        "v1.8.3": "cafebabe5678",
+        "v1.8.1": "f6776ef9e132",
+        "v1.8.2": "62f544cfe24f",
+        "v1.8.3": "5089441bc586",
     }
 
     deployment = {

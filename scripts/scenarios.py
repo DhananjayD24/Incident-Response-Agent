@@ -52,18 +52,23 @@ for _stream in (sys.stdout, sys.stderr):
 BASE_URL = "http://localhost:8000"
 TIMEOUT = 10.0
 
-# Known deployment SHAs (fake but deterministic for ground-truth matching)
+# Release commit SHAs — must match the tags in services/order-service-repo
+# (verify with: git -C services/order-service-repo rev-parse 'v1.8.1^{commit}')
 VERSIONS: dict[str, dict[str, str]] = {
+    "v1.8.0": {
+        "commit_sha": "86e5da365eaf2fe079cb156656c3cbc05a182ce9",
+        "notes": "Baseline — orders API (list, lookup, create)",
+    },
     "v1.8.1": {
-        "commit_sha": "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2",
+        "commit_sha": "f6776ef9e132a09b514a76548433084e5f20e27d",
         "notes": "Stable release — efficient JOIN queries",
     },
     "v1.8.2": {
-        "commit_sha": "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
+        "commit_sha": "62f544cfe24fd8ecb228f664454373ba5d535d50",
         "notes": "BUG: N+1 query regression in order listing endpoint",
     },
     "v1.8.3": {
-        "commit_sha": "cafebabecafebabecafebabecafebabecafebabe",
+        "commit_sha": "5089441bc5861f91159809d2996de816a31d97f2",
         "notes": "Text change in /health response (cosmetic, harmless)",
     },
 }

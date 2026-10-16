@@ -211,6 +211,7 @@ python -m pytest eval/tests services/traffic/tests   # from repo root (ground tr
 | Directory | Purpose |
 |-----------|---------|
 | `services/order-service` | Simulated production service (FastAPI + Postgres) |
+| `services/order-service-repo` | Standalone release-history git repo (tags `v1.8.0`–`v1.8.3`, N+1 regression in `v1.8.2`) |
 | `services/traffic` | Locust traffic generator |
 | `scripts/scenarios.py` | CLI to start/reset incident scenarios |
 | `monitoring/prometheus` | Prometheus scrape config |

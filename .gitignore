@@ -1,5 +1,7 @@
 __pycache__/
 *.py[cod]
+# Standalone release-history repo (has its own .git — never embed it)
+/services/order-service-repo/
 *.pyo
 *.pyd
 .Python
