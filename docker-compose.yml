@@ -21,6 +21,7 @@ services:
   # ── PostgreSQL ───────────────────────────────────────────────────────────────
   db:
     image: postgres:16-alpine
+    command: ["postgres", "-c", "shared_preload_libraries=pg_stat_statements"]
     container_name: ira-db
     environment:
       POSTGRES_DB: orders
@@ -148,6 +149,40 @@ services:
     depends_on:
       - prometheus
       - loki
+    logging: *default-logging
+
+    # ── MCP Server ───────────────────────────────────────────────────────────────
+  mcp-server:
+    build:
+      context: .
+      dockerfile: mcp_server/Dockerfile
+
+    container_name: incident-mcp
+
+    environment:
+      PROMETHEUS_URL: http://prometheus:9090
+      LOKI_URL: http://loki:3100
+      DATABASE_URL: postgresql://orders:orders@db:5432/orders
+
+      GIT_REPO_PATH: /repo
+      AUDIT_LOG_PATH: /app/logs/audit.jsonl
+
+    volumes:
+      - ./:/repo:ro
+      - ./logs:/app/logs
+
+    ports:
+      - "8001:8000"
+
+    depends_on:
+      db:
+        condition: service_healthy
+      prometheus:
+        condition: service_started
+      loki:
+        condition: service_started
+
+    restart: on-failure
     logging: *default-logging
 
 volumes:
